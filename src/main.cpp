@@ -8,6 +8,21 @@
 #include <algorithm>
 #include <filesystem>
 
+// --- DODANE DO MULTIPLAYERA ---
+#pragma comment(lib, "Ws2_32.lib")
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
+// Struktura danych przesyłana między graczami
+struct PlayerData {
+    float x;
+    float y;
+    int hp;
+    bool isShooting;
+};
+// ------------------------------
+
+
 using namespace std;
 
 // STANY APLIKACJI
@@ -341,6 +356,23 @@ int main() {
 
     GameState state = MENU;
 
+        // --- INICJALIZACJA SIECI ---
+    WSADATA wsaData;
+    WSAStartup(MAKEWORD(2, 2), &wsaData);
+    
+    SOCKET listenSocket = INVALID_SOCKET;
+    SOCKET netSocket = INVALID_SOCKET;
+    bool isHost = false;
+    bool isConnected = false;
+
+    // Zmienne drugiego gracza
+    float player2X = -100.0f; 
+    float player2Y = -100.0f;
+    int player2HP = 100;
+    bool p2WasShooting = false;
+    // ---------------------------
+
+
     // ZMIENNE GRACZA
     float playerX = W / 2.0f;
     float playerY = H - 60.0f;
@@ -541,6 +573,51 @@ int main() {
                 newNick.clear();
             }
 
+                        // --- LOGIKA ŁĄCZENIA (MULTIPLAYER) ---
+            if (!isConnected) {
+                if (IsKeyPressed(KEY_H)) { // HOSTUJ GRĘ
+                    listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+                    sockaddr_in serverAddr = { 0 };
+                    serverAddr.sin_family = AF_INET;
+                    serverAddr.sin_port = htons(27015);
+                    serverAddr.sin_addr.s_addr = INADDR_ANY;
+                    bind(listenSocket, (sockaddr*)&serverAddr, sizeof(serverAddr));
+                    listen(listenSocket, SOMAXCONN);
+                    
+                    // Ustawienie gniazda na nieblokujące (żeby gra nie zamarzała)
+                    u_long mode = 1;
+                    ioctlsocket(listenSocket, FIONBIO, &mode);
+                    isHost = true;
+                }
+                
+                if (IsKeyPressed(KEY_C)) { // DOŁĄCZ DO GRY
+                    netSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+                    sockaddr_in serverAddr = { 0 };
+                    serverAddr.sin_family = AF_INET;
+                    serverAddr.sin_port = htons(27015);
+                    // TUTAJ WPISZ IP HOSTA (jeśli gracie na 2 kompach, zmień na jego adres IP z Hamachi lub WiFi)
+                    inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr); 
+                    
+                    connect(netSocket, (sockaddr*)&serverAddr, sizeof(serverAddr));
+                    u_long mode = 1;
+                    ioctlsocket(netSocket, FIONBIO, &mode);
+                    isConnected = true;
+                    isHost = false;
+                }
+
+                // Jeśli jesteśmy hostem, sprawdzamy czy ktoś próbuje się dołączyć
+                if (isHost) {
+                    SOCKET client = accept(listenSocket, NULL, NULL);
+                    if (client != INVALID_SOCKET) {
+                        netSocket = client;
+                        u_long mode = 1;
+                        ioctlsocket(netSocket, FIONBIO, &mode);
+                        isConnected = true; // Udało się połączyć!
+                    }
+                }
+            }
+            // -------------------------------------
+
             // --- rysowanie menu ---
             BeginDrawing();
             ClearBackground(BLACK);
@@ -566,6 +643,14 @@ int main() {
 
             DrawText("ENTER - wybierz", W / 2 - 200, menuY, 20, DARKGRAY);
             DrawText("N - nowy profil", W / 2 - 200, menuY + 30, 20, DARKGRAY);
+
+                        if (!isConnected) {
+                if (isHost) DrawText("Czekam na gracza...", W / 2 - 200, menuY + 60, 20, RED);
+                else DrawText("H - Hostuj serwer  |  C - Dolacz do IP", W / 2 - 200, menuY + 60, 20, SKYBLUE);
+            } else {
+                DrawText("POLACZONO! Wcisnij ENTER aby zaczac", W / 2 - 200, menuY + 60, 20, GREEN);
+            }
+
 
             // pole edycji nicku
             if (newProfileMode) {
@@ -927,6 +1012,34 @@ int main() {
                 }
             }
         }
+
+
+                    // --- WYMIANA DANYCH PRZEZ SIEĆ ---
+            if (isConnected) {
+                // 1. Wysyłamy własne dane
+                bool amIShooting = (shootInput && shootTimer <= 0.0f);
+                PlayerData myData = { playerX, playerY, playerHP, amIShooting };
+                send(netSocket, (char*)&myData, sizeof(PlayerData), 0);
+
+                // 2. Odbieramy dane drugiego gracza
+                PlayerData otherData;
+                int bytesReceived = recv(netSocket, (char*)&otherData, sizeof(PlayerData), 0);
+                
+                if (bytesReceived == sizeof(PlayerData)) {
+                    player2X = otherData.x;
+                    player2Y = otherData.y;
+                    player2HP = otherData.hp;
+                    
+                    // Jeśli odebraliśmy info, że on strzelił (i to jest nowy strzał), generujemy jego pocisk
+                    if (otherData.isShooting && !p2WasShooting) {
+                        bullets.push_back({ player2X, player2Y - 32, -600.0f, 0, false, SKYBLUE, 10 });
+                    }
+                    p2WasShooting = otherData.isShooting;
+                }
+            }
+            // ---------------------------------
+
+        
         // ===============================
         // RYSOWANIE
         // ===============================
@@ -946,6 +1059,21 @@ int main() {
                 DrawCircle((int)playerX, (int)playerY, 18, RAYWHITE);
             }
 
+
+                        // --- drugi gracz (multiplayer) ---
+            if (isConnected && player2HP > 0) {
+                if (texPlayer.id != 0) {
+                    Rectangle src = { 0, 0, (float)texPlayer.width, (float)texPlayer.height };
+                    Rectangle dst = { player2X - 32, player2Y - 32, 64, 64 };
+                    DrawTexturePro(texPlayer, src, dst, { 0, 0 }, 0.0f, RED); // Barwimy go na czerwono dla odróżnienia
+                } else {
+                    DrawCircle((int)player2X, (int)player2Y, 18, RED);
+                }
+                DrawText("Partner", player2X - 25, player2Y + 35, 10, RAYWHITE);
+            }
+
+
+            
             // tarcza
             if (hasShield)
                 DrawRing({ playerX, playerY }, 32, 36, 0, 360, 0, SKYBLUE);
@@ -1087,6 +1215,11 @@ int main() {
     UnloadSound(sfxPower);
 
     CloseAudioDevice();
+        // ZAMKNIĘCIE SIECI
+    if (netSocket != INVALID_SOCKET) closesocket(netSocket);
+    if (listenSocket != INVALID_SOCKET) closesocket(listenSocket);
+    WSACleanup();
+
     CloseWindow();
 
     return 0;
