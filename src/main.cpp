@@ -160,7 +160,7 @@ void SpawnLevel(vector<Enemy>& enemies, int level, int formationType) {
         }
     } break;
 
-        // --- FORMACJA V ---
+          // --- FORMACJA V ---
     case 1: {
         int count = 7 + level;
         for (int i = 0; i < count; i++) {
@@ -183,7 +183,7 @@ void SpawnLevel(vector<Enemy>& enemies, int level, int formationType) {
         }
     } break;
 
-        // --- OKRĄG ---
+          // --- OKRĄG ---
     case 2: {
         int count = 12 + level * 2;
         float radius = 180.0f;
@@ -201,7 +201,7 @@ void SpawnLevel(vector<Enemy>& enemies, int level, int formationType) {
         }
     } break;
 
-        // --- BLOK ---
+          // --- BLOK ---
     case 3: {
         int rows = 5 + level / 2;
         int cols = 10 + level / 2;
@@ -360,14 +360,14 @@ int main() {
     // --- INICJALIZACJA SIECI ---
     WSADATA wsaData;
     WSAStartup(MAKEWORD(2, 2), &wsaData);
-    
+
     SOCKET listenSocket = INVALID_SOCKET;
     SOCKET netSocket = INVALID_SOCKET;
     bool isHost = false;
     bool isConnected = false;
 
     // Zmienne drugiego gracza
-    float player2X = -100.0f; 
+    float player2X = -100.0f;
     float player2Y = -100.0f;
     int player2HP = 100;
     bool p2WasShooting = false;
@@ -584,21 +584,21 @@ int main() {
                     serverAddr.sin_addr.s_addr = INADDR_ANY;
                     bind(listenSocket, (sockaddr*)&serverAddr, sizeof(serverAddr));
                     listen(listenSocket, SOMAXCONN);
-                    
+
                     // Ustawienie gniazda na nieblokujące
                     u_long mode = 1;
                     ioctlsocket(listenSocket, FIONBIO, &mode);
                     isHost = true;
                 }
-                
+
                 if (IsKeyPressed(KEY_C)) { // DOŁĄCZ DO GRY
                     netSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
                     sockaddr_in serverAddr = { 0 };
                     serverAddr.sin_family = AF_INET;
                     serverAddr.sin_port = htons(27015);
                     // TUTAJ WPISZ IP HOSTA (zmień na adres IP drugiego komputera jeśli gracie po sieci)
-                    inet_pton(AF_INET, "171.20.10.2", &serverAddr.sin_addr); 
-                    
+                    inet_pton(AF_INET, "172.20.10.2", &serverAddr.sin_addr);
+
                     connect(netSocket, (sockaddr*)&serverAddr, sizeof(serverAddr));
                     u_long mode = 1;
                     ioctlsocket(netSocket, FIONBIO, &mode);
@@ -648,7 +648,8 @@ int main() {
             if (!isConnected) {
                 if (isHost) DrawText("Czekam na gracza...", W / 2 - 200, menuY + 60, 20, RED);
                 else DrawText("H - Hostuj serwer  |  C - Dolacz do IP", W / 2 - 200, menuY + 60, 20, SKYBLUE);
-            } else {
+            }
+            else {
                 DrawText("POLACZONO! Wcisnij ENTER aby zaczac", W / 2 - 200, menuY + 60, 20, GREEN);
             }
 
@@ -789,7 +790,7 @@ int main() {
 
             bool shootInput = rapidFire ? shootDown : shootPressed;
             float fireRate = rapidFire ? 0.15f : 0.0f;
-            
+
             bool didIShoot = false; // Zmienna sieciowa (czy w tej klatce był strzał)
 
             if (shootInput && shootTimer <= 0.0f) {
@@ -1015,7 +1016,7 @@ int main() {
                     i--;
                 }
             }
-            
+
             // --- WYMIANA DANYCH PRZEZ SIEĆ ---
             if (isConnected) {
                 // 1. Wysyłamy własne dane
@@ -1025,12 +1026,12 @@ int main() {
                 // 2. Odbieramy dane drugiego gracza
                 PlayerData otherData;
                 int bytesReceived = recv(netSocket, (char*)&otherData, sizeof(PlayerData), 0);
-                
+
                 if (bytesReceived == sizeof(PlayerData)) {
                     player2X = otherData.x;
                     player2Y = otherData.y;
                     player2HP = otherData.hp;
-                    
+
                     // Jeśli odebraliśmy info, że on strzelił (i to jest nowy strzał), generujemy jego pocisk
                     if (otherData.isShooting && !p2WasShooting) {
                         bullets.push_back({ player2X, player2Y - 32, -600.0f, 0, false, SKYBLUE, 10 });
@@ -1066,7 +1067,8 @@ int main() {
                     Rectangle src = { 0, 0, (float)texPlayer.width, (float)texPlayer.height };
                     Rectangle dst = { player2X - 32, player2Y - 32, 64, 64 };
                     DrawTexturePro(texPlayer, src, dst, { 0, 0 }, 0.0f, RED); // Barwimy go na czerwono dla odróżnienia
-                } else {
+                }
+                else {
                     DrawCircle((int)player2X, (int)player2Y, 18, RED);
                 }
                 DrawText("Partner", player2X - 25, player2Y + 35, 10, RAYWHITE);
@@ -1213,7 +1215,7 @@ int main() {
     UnloadSound(sfxPower);
 
     CloseAudioDevice();
-    
+
     // ZAMKNIĘCIE SIECI
     if (netSocket != INVALID_SOCKET) closesocket(netSocket);
     if (listenSocket != INVALID_SOCKET) closesocket(listenSocket);
