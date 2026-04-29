@@ -597,7 +597,7 @@ int main() {
                     serverAddr.sin_family = AF_INET;
                     serverAddr.sin_port = htons(27015);
                     // TUTAJ WPISZ IP HOSTA (zmień na adres IP drugiego komputera jeśli gracie po sieci)
-                    inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr); 
+                    inet_pton(AF_INET, "171.20.10.2", &serverAddr.sin_addr); 
                     
                     connect(netSocket, (sockaddr*)&serverAddr, sizeof(serverAddr));
                     u_long mode = 1;
