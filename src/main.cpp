@@ -1,17 +1,12 @@
-#include "raylib.h"
-#include <string>
-#include <vector>
-#include <fstream>
-#include <cmath>
-#include <cstdlib>
-#include <cstdint>
-#include <algorithm>
-#include <filesystem>
+// Zabezpieczenie przed konfliktami nazw między Windows API a Raylib (np. Rectangle, CloseWindow)
+#define WIN32_LEAN_AND_MEAN
+#define NOGDI
+#define NOUSER
 
 // --- DODANE DO MULTIPLAYERA ---
-#pragma comment(lib, "Ws2_32.lib")
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#pragma comment(lib, "Ws2_32.lib")
 
 // Struktura danych przesyłana między graczami
 struct PlayerData {
@@ -22,6 +17,16 @@ struct PlayerData {
 };
 // ------------------------------
 
+// Dopiero po bibliotekach sieciowych dołączamy Raylib i resztę
+#include "raylib.h"
+#include <string>
+#include <vector>
+#include <fstream>
+#include <cmath>
+#include <cstdlib>
+#include <cstdint>
+#include <algorithm>
+#include <filesystem>
 
 using namespace std;
 
@@ -32,12 +37,12 @@ enum GameState {
     LEVEL_TRANSITION,  // ekran przejścia między poziomami
     WIN_SCREEN         // ekran zwycięstwa (boss)
 };
+
 float Clamp(float value, float min, float max) {
     if (value < min) return min;
     if (value > max) return max;
     return value;
 }
-
 
 // STRUKTURY ROZGRYWKI
 
@@ -133,14 +138,12 @@ void SpawnLevel(vector<Enemy>& enemies, int level, int formationType) {
     float startY = 100.0f;
 
     switch (formationType) {
-
         // --- SIATKA ---
     case 0: {
         int rows = 3 + level / 2;
         int cols = 6 + (level % 3);
 
-        float startX =
-            (1280 - (cols * spacingX)) / 2.0f + spacingX / 2.0f;
+        float startX = (1280 - (cols * spacingX)) / 2.0f + spacingX / 2.0f;
 
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
@@ -157,7 +160,7 @@ void SpawnLevel(vector<Enemy>& enemies, int level, int formationType) {
         }
     } break;
 
-          // --- FORMACJA V ---
+        // --- FORMACJA V ---
     case 1: {
         int count = 7 + level;
         for (int i = 0; i < count; i++) {
@@ -180,7 +183,7 @@ void SpawnLevel(vector<Enemy>& enemies, int level, int formationType) {
         }
     } break;
 
-          // --- OKRĄG ---
+        // --- OKRĄG ---
     case 2: {
         int count = 12 + level * 2;
         float radius = 180.0f;
@@ -198,14 +201,13 @@ void SpawnLevel(vector<Enemy>& enemies, int level, int formationType) {
         }
     } break;
 
-          // --- BLOK ---
+        // --- BLOK ---
     case 3: {
         int rows = 5 + level / 2;
         int cols = 10 + level / 2;
         float spacing = 56.0f;
 
-        float startX =
-            (1280 - (cols * spacing)) / 2.0f + spacing / 2.0f;
+        float startX = (1280 - (cols * spacing)) / 2.0f + spacing / 2.0f;
 
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
@@ -244,6 +246,7 @@ string caesarDecrypt(const string& text, int shift) {
     }
     return result;
 }
+
 string ResolveAssetPath(const char* filename) {
     namespace fs = std::filesystem;
     const vector<fs::path> prefixes = {
@@ -285,16 +288,13 @@ void MakeNearWhiteTransparent(Image* img, unsigned char threshold) {
     }
 }
 
-
 // PROFIL GRACZA
 struct Profile {
     string nick;      // nazwa gracza
     int bestScore = 0;
 };
 
-
 // MENEDŻER PROFILI
-
 class ProfileManager {
 public:
     vector<Profile> profiles; // lista profili
@@ -344,6 +344,7 @@ public:
         return profiles[selected];
     }
 };
+
 int main() {
     const int W = 1280;
     const int H = 720;
@@ -356,7 +357,7 @@ int main() {
 
     GameState state = MENU;
 
-        // --- INICJALIZACJA SIECI ---
+    // --- INICJALIZACJA SIECI ---
     WSADATA wsaData;
     WSAStartup(MAKEWORD(2, 2), &wsaData);
     
@@ -371,7 +372,6 @@ int main() {
     int player2HP = 100;
     bool p2WasShooting = false;
     // ---------------------------
-
 
     // ZMIENNE GRACZA
     float playerX = W / 2.0f;
@@ -501,6 +501,7 @@ int main() {
     }
 
     gEnemyTextureCount = (int)enemyTextures.size();
+
     // ===============================
     // GŁÓWNA PĘTLA GRY
     // ===============================
@@ -573,7 +574,7 @@ int main() {
                 newNick.clear();
             }
 
-                        // --- LOGIKA ŁĄCZENIA (MULTIPLAYER) ---
+            // --- LOGIKA ŁĄCZENIA (MULTIPLAYER) ---
             if (!isConnected) {
                 if (IsKeyPressed(KEY_H)) { // HOSTUJ GRĘ
                     listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -584,7 +585,7 @@ int main() {
                     bind(listenSocket, (sockaddr*)&serverAddr, sizeof(serverAddr));
                     listen(listenSocket, SOMAXCONN);
                     
-                    // Ustawienie gniazda na nieblokujące (żeby gra nie zamarzała)
+                    // Ustawienie gniazda na nieblokujące
                     u_long mode = 1;
                     ioctlsocket(listenSocket, FIONBIO, &mode);
                     isHost = true;
@@ -595,7 +596,7 @@ int main() {
                     sockaddr_in serverAddr = { 0 };
                     serverAddr.sin_family = AF_INET;
                     serverAddr.sin_port = htons(27015);
-                    // TUTAJ WPISZ IP HOSTA (jeśli gracie na 2 kompach, zmień na jego adres IP z Hamachi lub WiFi)
+                    // TUTAJ WPISZ IP HOSTA (zmień na adres IP drugiego komputera jeśli gracie po sieci)
                     inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr); 
                     
                     connect(netSocket, (sockaddr*)&serverAddr, sizeof(serverAddr));
@@ -644,13 +645,12 @@ int main() {
             DrawText("ENTER - wybierz", W / 2 - 200, menuY, 20, DARKGRAY);
             DrawText("N - nowy profil", W / 2 - 200, menuY + 30, 20, DARKGRAY);
 
-                        if (!isConnected) {
+            if (!isConnected) {
                 if (isHost) DrawText("Czekam na gracza...", W / 2 - 200, menuY + 60, 20, RED);
                 else DrawText("H - Hostuj serwer  |  C - Dolacz do IP", W / 2 - 200, menuY + 60, 20, SKYBLUE);
             } else {
                 DrawText("POLACZONO! Wcisnij ENTER aby zaczac", W / 2 - 200, menuY + 60, 20, GREEN);
             }
-
 
             // pole edycji nicku
             if (newProfileMode) {
@@ -734,6 +734,7 @@ int main() {
             EndDrawing();
             continue;
         }
+
         // ===============================
         // GAMEPLAY – LOGIKA
         // ===============================
@@ -788,8 +789,11 @@ int main() {
 
             bool shootInput = rapidFire ? shootDown : shootPressed;
             float fireRate = rapidFire ? 0.15f : 0.0f;
+            
+            bool didIShoot = false; // Zmienna sieciowa (czy w tej klatce był strzał)
 
             if (shootInput && shootTimer <= 0.0f) {
+                didIShoot = true;
                 shootTimer = fireRate;
 
                 int dmg = fireAmmo ? 20 : 10;
@@ -1011,14 +1015,11 @@ int main() {
                     i--;
                 }
             }
-        }
-
-
-                    // --- WYMIANA DANYCH PRZEZ SIEĆ ---
+            
+            // --- WYMIANA DANYCH PRZEZ SIEĆ ---
             if (isConnected) {
                 // 1. Wysyłamy własne dane
-                bool amIShooting = (shootInput && shootTimer <= 0.0f);
-                PlayerData myData = { playerX, playerY, playerHP, amIShooting };
+                PlayerData myData = { playerX, playerY, playerHP, didIShoot };
                 send(netSocket, (char*)&myData, sizeof(PlayerData), 0);
 
                 // 2. Odbieramy dane drugiego gracza
@@ -1038,8 +1039,8 @@ int main() {
                 }
             }
             // ---------------------------------
+        }
 
-        
         // ===============================
         // RYSOWANIE
         // ===============================
@@ -1059,8 +1060,7 @@ int main() {
                 DrawCircle((int)playerX, (int)playerY, 18, RAYWHITE);
             }
 
-
-                        // --- drugi gracz (multiplayer) ---
+            // --- drugi gracz (multiplayer) ---
             if (isConnected && player2HP > 0) {
                 if (texPlayer.id != 0) {
                     Rectangle src = { 0, 0, (float)texPlayer.width, (float)texPlayer.height };
@@ -1072,8 +1072,6 @@ int main() {
                 DrawText("Partner", player2X - 25, player2Y + 35, 10, RAYWHITE);
             }
 
-
-            
             // tarcza
             if (hasShield)
                 DrawRing({ playerX, playerY }, 32, 36, 0, 360, 0, SKYBLUE);
@@ -1215,7 +1213,8 @@ int main() {
     UnloadSound(sfxPower);
 
     CloseAudioDevice();
-        // ZAMKNIĘCIE SIECI
+    
+    // ZAMKNIĘCIE SIECI
     if (netSocket != INVALID_SOCKET) closesocket(netSocket);
     if (listenSocket != INVALID_SOCKET) closesocket(listenSocket);
     WSACleanup();
