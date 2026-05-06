@@ -3,19 +3,11 @@
 #define NOGDI
 #define NOUSER
 
-// --- DODANE DO MULTIPLAYERA ---
+// --- DODANE DO MULTIPLAYERA (UDP) ---
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #pragma comment(lib, "Ws2_32.lib")
-
-// Struktura danych przesyłana między graczami
-struct PlayerData {
-    float x;
-    float y;
-    int hp;
-    bool isShooting;
-};
-// ------------------------------
+// ------------------------------------
 
 // Dopiero po bibliotekach sieciowych dołączamy Raylib i resztę
 #include "raylib.h"
@@ -357,31 +349,35 @@ int main() {
 
     GameState state = MENU;
 
-    // --- INICJALIZACJA SIECI (UDP) ---
+    // ============================================
+    // INICJALIZACJA SIECI UDP
+    // ============================================
     WSADATA wsaData;
     WSAStartup(MAKEWORD(2, 2), &wsaData);
 
-    SOCKET udpSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    
-    // Ustawienie gniazda na nieblokujące (żeby gra nie stawała, czekając na dane)
-    u_long mode = 1;
-    ioctlsocket(udpSocket, FIONBIO, &mode);
+    SOCKET netSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
-    // Adres serwera w Pythonie
+    // Ustawienie gniazda na nieblokujące, żeby gra się nie zacinała
+    u_long mode = 1;
+    ioctlsocket(netSocket, FIONBIO, &mode);
+
     sockaddr_in serverAddr = { 0 };
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(8888); 
-    inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr);
-    
-    int serverAddrSize = sizeof(serverAddr);
+    serverAddr.sin_port = htons(5555); // Port serwera Python
+
+    // TUTAJ WPISZ IP KOMPUTERA, NA KTÓRYM DZIAŁA SKRYPT PYTHON (SERWER)
+    // Jeśli testujesz na jednym PC, zostaw "127.0.0.1". 
+    // Jeśli gracie na dwóch, wpisz np. "192.168.1.15" (IP Hosta)
+    inet_pton(AF_INET, "172.17.160.1", &serverAddr.sin_addr);
+
     bool isConnected = false;
 
-    // Zmienne drugiego gracza
+    // Zmienne drugiego gracza (z sieci)
     float player2X = -100.0f;
     float player2Y = -100.0f;
     int player2HP = 100;
     bool p2WasShooting = false;
-    // ---------------------------
+    // ============================================
 
     // ZMIENNE GRACZA
     float playerX = W / 2.0f;
@@ -422,7 +418,7 @@ int main() {
 
     // ===============================
     // ŁADOWANIE ASSETÓW – GRAFIKA
-    // ============================
+    // ===============================
 
     // Gracz
     Image playerImg = LoadImage(ResolveAssetPath("student3.png").c_str());
@@ -554,7 +550,7 @@ int main() {
 
                 if (IsKeyPressed(KEY_ENTER)) {
                     // reset stanu gry
-                    playerX = W / 2.0f - 50.0f; // Wyrównanie dla gracza 1
+                    playerX = W / 2.0f;
                     playerY = H - 60.0f;
                     playerHP = 100;
                     score = 0;
@@ -584,14 +580,12 @@ int main() {
                 newNick.clear();
             }
 
-            // --- LOGIKA DOŁĄCZANIA DO SERWERA (PYTHON) ---
+            // --- LOGIKA ŁĄCZENIA UDP ---
             if (!isConnected) {
-                if (IsKeyPressed(KEY_C)) { 
-                    // Żeby Python zapisał nasze IP i Port, musimy mu wysłać cokolwiek.
-                    // Wysyłamy pustą strukturę powitalną.
-                    PlayerData helloPacket = { -100, -100, 100, false };
-                    sendto(udpSocket, (const char*)&helloPacket, sizeof(PlayerData), 0, (sockaddr*)&serverAddr, serverAddrSize);
-                    
+                if (IsKeyPressed(KEY_C)) {
+                    // DOŁĄCZ DO SERWERA (Obaj gracze to klikają, aby dać znać Pythonowi)
+                    const char* joinMsg = "START";
+                    sendto(netSocket, joinMsg, strlen(joinMsg), 0, (sockaddr*)&serverAddr, sizeof(serverAddr));
                     isConnected = true;
                 }
             }
@@ -623,12 +617,11 @@ int main() {
             DrawText("ENTER - wybierz", W / 2 - 200, menuY, 20, DARKGRAY);
             DrawText("N - nowy profil", W / 2 - 200, menuY + 30, 20, DARKGRAY);
 
-            // Zmodyfikowane komunikaty w menu
             if (!isConnected) {
-                DrawText("C - Polacz z Serwerem Dedykowanym (UDP)", W / 2 - 200, menuY + 60, 20, SKYBLUE);
+                DrawText("C - Podlacz do serwera (Zrob to przed ENTER!)", W / 2 - 200, menuY + 60, 20, SKYBLUE);
             }
             else {
-                DrawText("POLACZONO Z SERWEREM! Wcisnij ENTER aby zaczac", W / 2 - 200, menuY + 60, 20, GREEN);
+                DrawText("POLACZONO! Wcisnij ENTER aby zaczac", W / 2 - 200, menuY + 60, 20, GREEN);
             }
 
             // pole edycji nicku
@@ -995,34 +988,38 @@ int main() {
                 }
             }
 
-            // --- WYMIANA DANYCH PRZEZ SIEĆ (UDP RELAY) ---
+            // ============================================
+            // WYMIANA DANYCH PRZEZ SIEĆ (UDP + PYTHON RELAY)
+            // ============================================
             if (isConnected) {
-                // 1. Wysyłamy własne dane do Pythona
-                PlayerData myData = { playerX, playerY, playerHP, didIShoot };
-                sendto(udpSocket, (const char*)&myData, sizeof(PlayerData), 0, (sockaddr*)&serverAddr, serverAddrSize);
+                // 1. WYSYŁANIE - Pakujemy nasze dane do prostego tekstu
+                char sendBuf[128];
+                sprintf(sendBuf, "%.2f %.2f %d %d", playerX, playerY, playerHP, didIShoot ? 1 : 0);
+                sendto(netSocket, sendBuf, strlen(sendBuf), 0, (sockaddr*)&serverAddr, sizeof(serverAddr));
 
-                // 2. Odbieramy dane drugiego gracza od Pythona
-                PlayerData otherData;
-                
-                // Używamy pętli while, ponieważ w UDP pakiety mogą przyjść w "paczce" 
-                // i chcemy wyczyścić bufor karty sieciowej do zera
-                while (recvfrom(udpSocket, (char*)&otherData, sizeof(PlayerData), 0, (sockaddr*)&serverAddr, &serverAddrSize) == sizeof(PlayerData)) {
-                    
-                    // Zabezpieczenie przed pakietem powitalnym (-100 oznacza, że to tylko "hello")
-                    if (otherData.x == -100) continue; 
+                // 2. ODBIERANIE - Czytamy wszystkie pakiety z bufora
+                char recvBuf[128];
+                sockaddr_in fromAddr;
+                int fromLen = sizeof(fromAddr);
 
-                    player2X = otherData.x;
-                    player2Y = otherData.y;
-                    player2HP = otherData.hp;
+                int bytesReceived;
+                // Pętla while wyciąga wszystko z kolejki, aż będzie pusta (non-blocking)
+                while ((bytesReceived = recvfrom(netSocket, recvBuf, sizeof(recvBuf) - 1, 0, (sockaddr*)&fromAddr, &fromLen)) > 0) {
+                    recvBuf[bytesReceived] = '\0'; // Zamknięcie tekstu
 
-                    // Strzał z punktu widzenia drugiego gracza
-                    if (otherData.isShooting && !p2WasShooting) {
-                        bullets.push_back({ player2X, player2Y - 32, -600.0f, 0, false, SKYBLUE, 10 });
+                    int p2ShootFlag = 0;
+                    // Rozkodowujemy tekst z powrotem na zmienne
+                    if (sscanf(recvBuf, "%f %f %d %d", &player2X, &player2Y, &player2HP, &p2ShootFlag) == 4) {
+
+                        // Jeśli odebraliśmy info, że on strzelił (i to jest nowy strzał)
+                        if (p2ShootFlag == 1 && !p2WasShooting) {
+                            bullets.push_back({ player2X, player2Y - 32, -600.0f, 0, false, SKYBLUE, 10 });
+                        }
+                        p2WasShooting = (p2ShootFlag == 1);
                     }
-                    p2WasShooting = otherData.isShooting;
                 }
             }
-            // ---------------------------------
+            // ============================================
         }
 
         // ===============================
@@ -1199,7 +1196,8 @@ int main() {
 
     CloseAudioDevice();
 
-    if (udpSocket != INVALID_SOCKET) closesocket(udpSocket);
+    // ZAMKNIĘCIE SIECI
+    if (netSocket != INVALID_SOCKET) closesocket(netSocket);
     WSACleanup();
 
     CloseWindow();
