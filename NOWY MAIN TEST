@@ -368,7 +368,7 @@ int main() {
     // TUTAJ WPISZ IP KOMPUTERA, NA KTÓRYM DZIAŁA SKRYPT PYTHON (SERWER)
     // Jeśli testujesz na jednym PC, zostaw "127.0.0.1". 
     // Jeśli gracie na dwóch, wpisz np. "192.168.1.15" (IP Hosta)
-    inet_pton(AF_INET, "172.17.160.1", &serverAddr.sin_addr);
+    inet_pton(AF_INET, "172.20.10.2", &serverAddr.sin_addr);
 
     bool isConnected = false;
 
